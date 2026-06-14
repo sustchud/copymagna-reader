@@ -3,8 +3,8 @@
 // Requires the iPad to be on a network/proxy where mangacopy reads (e.g. Hong Kong).
 
 // ---------------- config ----------------
-const API = 'https://api.mangacopy.com/api/v3';   // search/browse (not region-gated)
-const SITE = 'https://www.2026copy.com';          // reading endpoints (region-gated → need HK)
+const API = 'https://api.2026copy.com/api/v3';     // search/browse (mainland-accessible)
+const SITE = 'https://www.2026copy.com';           // reading endpoints (mainland-direct serves content)
 let CCT = 'op0zzpvv.nmn.00p';                      // AES key (site's `var cct`; refreshed from reader pages)
 const APP_HEADERS = { version: '3.0.0', platform: '3', source: 'copyApp', webp: '1', region: '1' };
 
@@ -50,13 +50,6 @@ async function getComic(pw) {
   const d = await fetch(`${SITE}/comicdetail/${pw}/chapters`).then(r => r.json());
   if (!d.results) throw new Error('no data (地區限制?)');
   const j = JSON.parse(await aesDecrypt(d.results));
-  // debug: stash the real decrypted shape so we can see HK field names
-  try {
-    const gr = j.build?.groups || j.groups || {};
-    const dbg = {};
-    for (const [k, g] of Object.entries(gr)) dbg[k] = { count: g.count, len: (g.chapters || []).length, sampleChapter: (g.chapters || [])[0] };
-    window.__cmdbg = { topKeys: Object.keys(j), buildKeys: j.build ? Object.keys(j.build) : null, groups: dbg };
-  } catch {}
   const groupsRaw = j.build?.groups || j.groups || {};
   const groups = {};
   for (const [k, g] of Object.entries(groupsRaw)) {
@@ -80,23 +73,6 @@ async function getImages(pw, uuid) {
   if (!ck) return [];
   const arr = JSON.parse(await aesDecrypt(ck, cct || CCT));
   return arr.map(x => x.url).filter(Boolean);
-}
-
-// diagnostic: where do we actually exit, and where do chapters live?
-async function runDiag(pw) {
-  const out = { decrypted: window.__cmdbg };
-  try { const t = await fetch(`${SITE}/cdn-cgi/trace`).then(r => r.text()); out.SITE_exit = (t.match(/loc=(\w+)/) || [])[1]; out.SITE_ip = (t.match(/ip=([\d.]+)/) || [])[1]; } catch (e) { out.SITE_err = String(e).slice(0, 60); }
-  try { const t = await fetch('https://api.mangacopy.com/cdn-cgi/trace').then(r => r.text()); out.API_exit = (t.match(/loc=(\w+)/) || [])[1]; } catch (e) { out.API_err = String(e).slice(0, 40); }
-  try {
-    const h = await fetch(`${SITE}/comic/${pw}`).then(r => r.text());
-    out.detailHtml_len = h.length;
-    out.detailHtml_uuidCount = (h.match(/\/chapter\/[a-z0-9-]{12,}/gi) || []).length;
-    out.detailHtml_hasCct = /var cct/.test(h);
-  } catch (e) { out.detailHtml_err = String(e).slice(0, 60); }
-  // does the APP API /api/v3 work from here (HK)? (it's what the site likely uses for chapters)
-  try { const d = await jget(`${API}/comic/${pw}/group/default/chapters?limit=3&offset=0&platform=3`, APP_HEADERS); out.apiV3_total = d.results?.total ?? null; out.apiV3_sampleChapter = (d.results?.list || [])[0] || null; } catch (e) { out.apiV3_chapters_err = String(e).slice(0, 80); }
-  try { const d = await jget(`${API}/comic2/${pw}?platform=3`, APP_HEADERS); out.apiV3_comic2 = d.results ? 'HAS DATA' : ('null code=' + d.code); } catch (e) { out.apiV3_comic2_err = String(e).slice(0, 60); }
-  return out;
 }
 
 // ---------------- DOM helpers ----------------
@@ -193,9 +169,7 @@ async function showDetail(pw, group) {
     head.append(el('div', { className: 'section-title', textContent: `共 ${g.chapters.length} 話` }), rev);
     view.append(head);
     if (g.chapters.length === 0) {
-      const pre = el('pre', { textContent: '诊断中…(请稍等几秒)', style: 'white-space:pre-wrap;font-size:11px;color:#f0c66b;background:#1a1a1e;padding:10px;border-radius:8px;overflow:auto;max-height:60vh;word-break:break-all' });
-      view.append(pre);
-      runDiag(pw).then(o => { pre.textContent = '调试信息(截图发我):\n' + JSON.stringify(o, null, 1); }).catch(e => { pre.textContent = '诊断失败: ' + e; });
+      view.append(el('div', { className: 'empty', textContent: '暫無章節（網站維護中或需大陸直連,稍後再試）' }));
     }
     const ordered = detailReverse ? g.chapters.slice().reverse() : g.chapters;
     const grid = el('div', { className: 'ch-grid' });
