@@ -82,6 +82,20 @@ async function getImages(pw, uuid) {
   return arr.map(x => x.url).filter(Boolean);
 }
 
+// diagnostic: where do we actually exit, and where do chapters live?
+async function runDiag(pw) {
+  const out = { decrypted: window.__cmdbg };
+  try { const t = await fetch(`${SITE}/cdn-cgi/trace`).then(r => r.text()); out.SITE_exit = (t.match(/loc=(\w+)/) || [])[1]; out.SITE_ip = (t.match(/ip=([\d.]+)/) || [])[1]; } catch (e) { out.SITE_err = String(e).slice(0, 60); }
+  try { const t = await fetch('https://api.mangacopy.com/cdn-cgi/trace').then(r => r.text()); out.API_exit = (t.match(/loc=(\w+)/) || [])[1]; } catch (e) { out.API_err = String(e).slice(0, 40); }
+  try {
+    const h = await fetch(`${SITE}/comic/${pw}`).then(r => r.text());
+    out.detailHtml_len = h.length;
+    out.detailHtml_uuidCount = (h.match(/\/chapter\/[a-z0-9-]{12,}/gi) || []).length;
+    out.detailHtml_hasCct = /var cct/.test(h);
+  } catch (e) { out.detailHtml_err = String(e).slice(0, 60); }
+  return out;
+}
+
 // ---------------- DOM helpers ----------------
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of [].concat(kids)) n.append(k); return n; };
@@ -175,8 +189,10 @@ async function showDetail(pw, group) {
     rev.onclick = () => { detailReverse = !detailReverse; showDetail(pw, active); };
     head.append(el('div', { className: 'section-title', textContent: `共 ${g.chapters.length} 話` }), rev);
     view.append(head);
-    if (g.chapters.length === 0 && window.__cmdbg) {
-      view.append(el('pre', { textContent: '调试信息(截图发我):\n' + JSON.stringify(window.__cmdbg, null, 1), style: 'white-space:pre-wrap;font-size:11px;color:#f0c66b;background:#1a1a1e;padding:10px;border-radius:8px;overflow:auto;max-height:60vh;word-break:break-all' }));
+    if (g.chapters.length === 0) {
+      const pre = el('pre', { textContent: '诊断中…(请稍等几秒)', style: 'white-space:pre-wrap;font-size:11px;color:#f0c66b;background:#1a1a1e;padding:10px;border-radius:8px;overflow:auto;max-height:60vh;word-break:break-all' });
+      view.append(pre);
+      runDiag(pw).then(o => { pre.textContent = '调试信息(截图发我):\n' + JSON.stringify(o, null, 1); }).catch(e => { pre.textContent = '诊断失败: ' + e; });
     }
     const ordered = detailReverse ? g.chapters.slice().reverse() : g.chapters;
     const grid = el('div', { className: 'ch-grid' });
