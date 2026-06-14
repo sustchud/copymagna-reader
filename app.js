@@ -93,6 +93,9 @@ async function runDiag(pw) {
     out.detailHtml_uuidCount = (h.match(/\/chapter\/[a-z0-9-]{12,}/gi) || []).length;
     out.detailHtml_hasCct = /var cct/.test(h);
   } catch (e) { out.detailHtml_err = String(e).slice(0, 60); }
+  // does the APP API /api/v3 work from here (HK)? (it's what the site likely uses for chapters)
+  try { const d = await jget(`${API}/comic/${pw}/group/default/chapters?limit=3&offset=0&platform=3`, APP_HEADERS); out.apiV3_total = d.results?.total ?? null; out.apiV3_sampleChapter = (d.results?.list || [])[0] || null; } catch (e) { out.apiV3_chapters_err = String(e).slice(0, 80); }
+  try { const d = await jget(`${API}/comic2/${pw}?platform=3`, APP_HEADERS); out.apiV3_comic2 = d.results ? 'HAS DATA' : ('null code=' + d.code); } catch (e) { out.apiV3_comic2_err = String(e).slice(0, 60); }
   return out;
 }
 
