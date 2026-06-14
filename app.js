@@ -50,6 +50,13 @@ async function getComic(pw) {
   const d = await fetch(`${SITE}/comicdetail/${pw}/chapters`).then(r => r.json());
   if (!d.results) throw new Error('no data (地區限制?)');
   const j = JSON.parse(await aesDecrypt(d.results));
+  // debug: stash the real decrypted shape so we can see HK field names
+  try {
+    const gr = j.build?.groups || j.groups || {};
+    const dbg = {};
+    for (const [k, g] of Object.entries(gr)) dbg[k] = { count: g.count, len: (g.chapters || []).length, sampleChapter: (g.chapters || [])[0] };
+    window.__cmdbg = { topKeys: Object.keys(j), buildKeys: j.build ? Object.keys(j.build) : null, groups: dbg };
+  } catch {}
   const groupsRaw = j.build?.groups || j.groups || {};
   const groups = {};
   for (const [k, g] of Object.entries(groupsRaw)) {
@@ -168,6 +175,9 @@ async function showDetail(pw, group) {
     rev.onclick = () => { detailReverse = !detailReverse; showDetail(pw, active); };
     head.append(el('div', { className: 'section-title', textContent: `共 ${g.chapters.length} 話` }), rev);
     view.append(head);
+    if (g.chapters.length === 0 && window.__cmdbg) {
+      view.append(el('pre', { textContent: '调试信息(截图发我):\n' + JSON.stringify(window.__cmdbg, null, 1), style: 'white-space:pre-wrap;font-size:11px;color:#f0c66b;background:#1a1a1e;padding:10px;border-radius:8px;overflow:auto;max-height:60vh;word-break:break-all' }));
+    }
     const ordered = detailReverse ? g.chapters.slice().reverse() : g.chapters;
     const grid = el('div', { className: 'ch-grid' });
     for (const c of ordered) {
